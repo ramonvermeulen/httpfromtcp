@@ -11,12 +11,17 @@ import (
 func getLinesChannel(f io.ReadCloser) <-chan string {
 	c := make(chan string, 1)
 	content := make([]byte, 8)
+	var line string
 
 	go func() {
-		defer close(c)
-		defer f.Close()
-		defer fmt.Println("closed connection")
-		var line string
+		defer func() {
+			if line != "" {
+				c <- line
+			}
+			close(c)
+			fmt.Println("closed connection")
+			f.Close()
+		}()
 		for {
 			n, err := f.Read(content)
 			content := content[:n]
