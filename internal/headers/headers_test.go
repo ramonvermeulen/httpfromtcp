@@ -14,7 +14,7 @@ func TestHeaders_Parse(t *testing.T) {
 	n, done, err := headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["Host"])
+	assert.Equal(t, "localhost:42069", headers["host"])
 	assert.Equal(t, 25, n)
 	assert.True(t, done)
 
@@ -24,7 +24,7 @@ func TestHeaders_Parse(t *testing.T) {
 	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["Host"])
+	assert.Equal(t, "localhost:42069", headers["host"])
 	assert.Equal(t, 34, n)
 	assert.True(t, done)
 
@@ -35,8 +35,8 @@ func TestHeaders_Parse(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, headers)
 	require.Len(t, headers, 2)
-	require.Equal(t, "curl/7.81.0", headers["User-Agent"])
-	require.Equal(t, "*/*", headers["Accept"])
+	require.Equal(t, "curl/7.81.0", headers["user-agent"])
+	require.Equal(t, "*/*", headers["accept"])
 	assert.Equal(t, 40, n)
 	assert.True(t, done)
 
@@ -50,7 +50,15 @@ func TestHeaders_Parse(t *testing.T) {
 	require.Equal(t, 2, n)
 	require.True(t, done)
 
-	// Test: Invalid spacing header
+	// Test: invalid special characters
+	headers = NewHeaders()
+	data = []byte("H©st: localhost:42069\r\n\r\n")
+	n, done, err = headers.Parse(data)
+	require.Error(t, err)
+	require.Equal(t, 0, n)
+	require.False(t, done)
+
+	// Test: invalid spacing header
 	headers = NewHeaders()
 	data = []byte("       Host : localhost:42069       \r\n\r\n")
 	n, done, err = headers.Parse(data)
