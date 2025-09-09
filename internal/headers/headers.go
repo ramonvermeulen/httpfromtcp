@@ -3,9 +3,8 @@ package headers
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
-
-type Headers map[string]string
 
 var (
 	LineSeparator               = []byte("\r\n")
@@ -13,10 +12,6 @@ var (
 	ErrMalformedHeaderFieldLine = fmt.Errorf("malformed header fieldLine")
 	ErrMalformedHeaderFieldName = fmt.Errorf("malformed header fieldName")
 )
-
-func NewHeaders() Headers {
-	return Headers{}
-}
 
 func isValidToken(bytes []byte) bool {
 	for _, b := range bytes {
@@ -44,6 +39,26 @@ func parseSingleHeader(fieldLine []byte) (string, string, error) {
 	return string(key), string(value), nil
 }
 
+type Headers map[string]string
+
+func NewHeaders() Headers {
+	return Headers{}
+}
+
+func (h Headers) Get(key string) string {
+	return h[strings.ToLower(key)]
+}
+
+func (h Headers) Set(key, value string) {
+	key = strings.ToLower(key)
+
+	if v, ok := h[key]; ok {
+		h[key] = fmt.Sprintf("%s, %s", v, value)
+	} else {
+		h[key] = value
+	}
+}
+
 func (h Headers) Parse(data []byte) (int, bool, error) {
 	read := 0
 	done := false
@@ -64,10 +79,10 @@ func (h Headers) Parse(data []byte) (int, bool, error) {
 
 		key, value, err := parseSingleHeader(data[read : read+ls])
 		if err != nil {
-			return 0, false, ErrMalformedHeaderFieldLine
+			return 0, false, fmt.Errorf("malformed header fieldLine: %w", err)
 		}
+		h.Set(key, value)
 
-		h[key] = value
 		read += ls + len(LineSeparator)
 	}
 

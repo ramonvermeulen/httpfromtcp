@@ -14,8 +14,19 @@ func TestHeaders_Parse(t *testing.T) {
 	n, done, err := headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["host"])
+	assert.Equal(t, "localhost:42069", headers.Get("host"))
 	assert.Equal(t, 25, n)
+	assert.True(t, done)
+
+	// Test: two times the same header, should append
+	headers = NewHeaders()
+	data = []byte("FooBar:   hello\r\nFooBar: noway\r\n\r\n")
+	n, done, err = headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	require.Len(t, headers, 1)
+	assert.Equal(t, "hello, noway", headers.Get("foobar"))
+	assert.Equal(t, 34, n)
 	assert.True(t, done)
 
 	// Test: Valid single header with extra whitespace
@@ -24,7 +35,7 @@ func TestHeaders_Parse(t *testing.T) {
 	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["host"])
+	assert.Equal(t, "localhost:42069", headers.Get("host"))
 	assert.Equal(t, 34, n)
 	assert.True(t, done)
 
@@ -35,8 +46,8 @@ func TestHeaders_Parse(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, headers)
 	require.Len(t, headers, 2)
-	require.Equal(t, "curl/7.81.0", headers["user-agent"])
-	require.Equal(t, "*/*", headers["accept"])
+	require.Equal(t, "curl/7.81.0", headers.Get("user-agent"))
+	require.Equal(t, "*/*", headers.Get("accept"))
 	assert.Equal(t, 40, n)
 	assert.True(t, done)
 
