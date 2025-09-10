@@ -150,6 +150,5 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 			buffer = buffer[bytesProcessed:]
 		}
 	}
-
 	return request, nil
 }
