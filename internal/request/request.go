@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"slices"
+
+	"github.com/ramonvermeulen/httpfromtcp/internal/headers"
 )
 
 var HTTPMethods = [][]byte{
@@ -29,8 +31,9 @@ var (
 type requestState int
 
 const (
-	Initialized requestState = iota
-	Done                     = iota
+	Initialized    requestState = iota
+	ParsingHeaders requestState = iota
+	Done                        = iota
 )
 
 type RequestLine struct {
@@ -41,38 +44,66 @@ type RequestLine struct {
 
 type Request struct {
 	RequestLine RequestLine
+	Headers     headers.Headers
 	state       requestState
 }
 
+func NewRequest() *Request {
+	return &Request{
+		Headers: headers.NewHeaders(),
+		state:   Initialized,
+	}
+}
+
 func (r *Request) parse(data []byte) (int, error) {
+	read := 0
+
 outer:
-	for {
+	for r.state != Done {
+		currentData := data[read:]
+
 		switch r.state {
 		case Initialized:
-			bytesProcessed, requestLine, err := parseRequestLine(data)
+			bytesProcessed, requestLine, err := parseRequestLine(currentData)
 			if err != nil {
 				return 0, err
 			}
 			if bytesProcessed == 0 {
 				break outer
 			}
+			read += bytesProcessed
 
 			r.RequestLine = *requestLine
-			r.state = Done
-			return len(data), nil
+			r.state = ParsingHeaders
+
+		case ParsingHeaders:
+			bytesProcessed, done, err := r.Headers.Parse(currentData)
+			if err != nil {
+				return 0, err
+			}
+			if bytesProcessed == 0 {
+				break outer
+			}
+			read += bytesProcessed
+
+			if done {
+				r.state = Done
+			}
+
 		case Done:
 			return 0, ErrParsingInDoneState
 		}
 	}
-	return 0, nil
+	return read, nil
 }
 
 func parseRequestLine(line []byte) (int, *RequestLine, error) {
-	if !bytes.Contains(line, LineSeparator) {
+	lsIdx := bytes.Index(line, LineSeparator)
+	if lsIdx == -1 {
 		return 0, nil, nil
 	}
 
-	line = bytes.SplitN(line, LineSeparator, 2)[0]
+	line = line[:lsIdx]
 	parts := bytes.Split(line, []byte(" "))
 	if len(parts) != 3 {
 		return 0, nil, ErrMalformedRequestLine
@@ -92,7 +123,7 @@ func parseRequestLine(line []byte) (int, *RequestLine, error) {
 		return 0, nil, ErrUnsupportedHttpMethod
 	}
 
-	return len([]byte(line)), &RequestLine{
+	return len([]byte(line)) + len(LineSeparator), &RequestLine{
 		HTTPVersion:   string(versionParts[1]),
 		RequestTarget: string(requestTarget),
 		Method:        string(method),
@@ -100,8 +131,7 @@ func parseRequestLine(line []byte) (int, *RequestLine, error) {
 }
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	request := &Request{}
-	request.state = Initialized
+	request := NewRequest()
 	buffer := make([]byte, 1024)
 	bufferLen := 0
 
@@ -116,6 +146,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 			return nil, err
 		}
 		if bytesProcessed > 0 {
+			bufferLen -= bytesProcessed
 			buffer = buffer[bytesProcessed:]
 		}
 	}

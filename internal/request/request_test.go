@@ -40,6 +40,61 @@ func TestRequestFromReader(t *testing.T) {
 	}
 	_, err = RequestFromReader(reader)
 	require.Error(t, err)
+
+	// Test: Standard Headers
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "localhost:42069", r.Headers.Get("host"))
+	assert.Equal(t, "curl/7.81.0", r.Headers.Get("user-agent"))
+	assert.Equal(t, "*/*", r.Headers.Get("accept"))
+
+	// Test: Malformed Header
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost localhost:42069\r\n\r\n",
+		numBytesPerRead: 1,
+	}
+	r, err = RequestFromReader(reader)
+	require.Error(t, err)
+	require.Nil(t, r)
+
+	// Test: Empty Headers
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\n\r\n",
+		numBytesPerRead: 1,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Empty(t, r.Headers)
+	assert.Equal(t, "GET", r.RequestLine.Method)
+	assert.Equal(t, "/", r.RequestLine.RequestTarget)
+
+	// Test: Duplicate headers with allowed spacing and case insensitivity
+	reader = &chunkReader{
+		data:            "GET /cats HTTP/1.1\r\n   Foo:   bar\r\n    foo: BiZ\r\n\r\n",
+		numBytesPerRead: 16,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	require.Equal(t, 1, len(r.Headers))
+	assert.Equal(t, "bar, BiZ", r.Headers.Get("foo"))
+
+	// Test: Missing end of headers
+	reader = &chunkReader{
+		data:            "GET /cats HTTP/1.1\r\nfoo: BiZ\r\n",
+		numBytesPerRead: 16,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	require.Equal(t, 1, len(r.Headers))
+	assert.Equal(t, "BiZ", r.Headers.Get("foo"))
 }
 
 type chunkReader struct {

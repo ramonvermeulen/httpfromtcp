@@ -15,23 +15,26 @@ var (
 
 func isValidToken(bytes []byte) bool {
 	for _, b := range bytes {
-		switch {
-		case b >= 'A' && b <= 'Z':
-		case b >= 'a' && b <= 'z':
-		case b >= '0' && b <= '9':
-		case b == '!' || b == '#' || b == '$' || b == '%' || b == '&' || b == '\'' ||
-			b == '*' || b == '+' || b == '-' || b == '.' || b == '^' || b == '_' ||
-			b == '`' || b == '|' || b == '~':
-		default:
+		found := false
+		if b >= 'A' && b <= 'Z' || b >= 'a' && b <= 'z' || b >= '0' && b <= '9' {
+			found = true
+		}
+
+		switch b {
+		case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~', ':':
+			found = true
+		}
+		if !found {
 			return false
 		}
 	}
+
 	return true
 }
 
 func parseSingleHeader(fieldLine []byte) (string, string, error) {
 	rKey, rValue, _ := bytes.Cut(fieldLine, ValueSeparator)
-	key := bytes.ToLower(bytes.TrimSpace(rKey))
+	key := bytes.TrimSpace(bytes.ToLower(rKey))
 	if !isValidToken(key) || len(key) == 0 {
 		return "", "", ErrMalformedHeaderFieldName
 	}
