@@ -42,5 +42,6 @@ func WriteHeaders(w io.Writer, hdrs headers.Headers) error {
 	for key, value := range hdrs {
 		fmt.Fprintf(w, "%s: %s\r\n", key, value)
 	}
+	fmt.Fprintf(w, "\r\n")
 	return nil
 }
