@@ -14,7 +14,8 @@ func TestHeaders_Parse(t *testing.T) {
 	n, done, err := headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers.Get("host"))
+	h, _ := headers.Get("host")
+	assert.Equal(t, "localhost:42069", h)
 	assert.Equal(t, 25, n)
 	assert.True(t, done)
 
@@ -25,7 +26,8 @@ func TestHeaders_Parse(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, headers)
 	require.Len(t, headers, 1)
-	assert.Equal(t, "hello, noway", headers.Get("foobar"))
+	h, _ = headers.Get("foobar")
+	assert.Equal(t, "hello, noway", h)
 	assert.Equal(t, 34, n)
 	assert.True(t, done)
 
@@ -35,7 +37,8 @@ func TestHeaders_Parse(t *testing.T) {
 	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers.Get("host"))
+	h, _ = headers.Get("host")
+	assert.Equal(t, "localhost:42069", h)
 	assert.Equal(t, 34, n)
 	assert.True(t, done)
 
@@ -46,8 +49,10 @@ func TestHeaders_Parse(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, headers)
 	require.Len(t, headers, 2)
-	require.Equal(t, "curl/7.81.0", headers.Get("user-agent"))
-	require.Equal(t, "*/*", headers.Get("accept"))
+	h, _ = headers.Get("user-agent")
+	require.Equal(t, "curl/7.81.0", h)
+	h, _ = headers.Get("accept")
+	require.Equal(t, "*/*", h)
 	assert.Equal(t, 40, n)
 	assert.True(t, done)
 

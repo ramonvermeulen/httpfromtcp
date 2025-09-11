@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strconv"
 
 	"github.com/ramonvermeulen/httpfromtcp/internal/headers"
 )
@@ -21,19 +22,23 @@ var HTTPMethods = [][]byte{
 }
 
 var (
-	ErrMalformedRequestLine   = fmt.Errorf("malformed request line")
-	ErrUnsupportedHttpVersion = fmt.Errorf("unsupported HTTP version")
-	ErrUnsupportedHttpMethod  = fmt.Errorf("unsupported HTTP method")
-	ErrParsingInDoneState     = fmt.Errorf("attempted to parse request in done state")
-	LineSeparator             = []byte("\r\n")
+	ErrMalformedRequestLine    = fmt.Errorf("malformed request line")
+	ErrMalformedContentLength  = fmt.Errorf("malformed request line")
+	ErrUnsupportedHTTPVersion  = fmt.Errorf("unsupported HTTP version")
+	ErrUnsupportedHTTPMethod   = fmt.Errorf("unsupported HTTP method")
+	ErrParsingInDoneState      = fmt.Errorf("attempted to parse request in done state")
+	ErrBodyExceedContentLength = fmt.Errorf("body exceeds content-length")
+	ErrBodyWithinContentLength = fmt.Errorf("body exceeds content-length")
+	LineSeparator              = []byte("\r\n")
 )
 
 type requestState int
 
 const (
-	Initialized    requestState = iota
-	ParsingHeaders requestState = iota
-	Done                        = iota
+	StateInitialized requestState = iota
+	StateHeaders     requestState = iota
+	StateBody        requestState = iota
+	StateDone                     = iota
 )
 
 type RequestLine struct {
@@ -45,53 +50,99 @@ type RequestLine struct {
 type Request struct {
 	RequestLine RequestLine
 	Headers     headers.Headers
-	state       requestState
+	Body        string
+
+	state requestState
 }
 
 func NewRequest() *Request {
 	return &Request{
 		Headers: headers.NewHeaders(),
-		state:   Initialized,
+		state:   StateInitialized,
 	}
+}
+
+func getIntFromHeader(h headers.Headers, key string, defaultValue int) int {
+	valueStr, exists := h.Get(key)
+	if !exists {
+		return defaultValue
+	}
+
+	value, err := strconv.Atoi(valueStr)
+	if err != nil {
+		return defaultValue
+	}
+
+	return value
+}
+
+func (r *Request) hasBody() bool {
+	cl := getIntFromHeader(r.Headers, "content-length", 0)
+	return cl != 0
 }
 
 func (r *Request) parse(data []byte) (int, error) {
 	read := 0
 
 outer:
-	for r.state != Done {
+	for r.state != StateDone {
 		currentData := data[read:]
+		if len(currentData) == 0 {
+			break outer
+		}
 
 		switch r.state {
-		case Initialized:
-			bytesProcessed, requestLine, err := parseRequestLine(currentData)
+		case StateInitialized:
+			bp, rl, err := parseRequestLine(currentData)
 			if err != nil {
 				return 0, err
 			}
-			if bytesProcessed == 0 {
+			if bp == 0 {
 				break outer
 			}
-			read += bytesProcessed
+			r.RequestLine = *rl
+			r.state = StateHeaders
+			read += bp
 
-			r.RequestLine = *requestLine
-			r.state = ParsingHeaders
-
-		case ParsingHeaders:
-			bytesProcessed, done, err := r.Headers.Parse(currentData)
+		case StateHeaders:
+			bp, done, err := r.Headers.Parse(currentData)
 			if err != nil {
 				return 0, err
 			}
-			if bytesProcessed == 0 {
+			if bp == 0 {
 				break outer
 			}
-			read += bytesProcessed
 
 			if done {
-				r.state = Done
+				if r.hasBody() {
+					r.state = StateBody
+				} else {
+					r.state = StateDone
+				}
+			}
+			read += bp
+
+		case StateBody:
+			cl := getIntFromHeader(r.Headers, "content-length", 0)
+
+			remaining := min(cl-len(r.Body), len(currentData))
+			r.Body += string(currentData[:remaining])
+			read += remaining
+
+			if len(r.Body) > cl {
+				return 0, ErrBodyExceedContentLength
 			}
 
-		case Done:
+			if len(r.Body) == cl {
+				r.state = StateDone
+				break outer
+			}
+
+		case StateDone:
 			return 0, ErrParsingInDoneState
+
+		default:
+			panic("This should never happen")
 		}
 	}
 	return read, nil
@@ -114,13 +165,13 @@ func parseRequestLine(line []byte) (int, *RequestLine, error) {
 	method := parts[0]
 
 	if len(versionParts) != 2 || !bytes.Equal(versionParts[0], []byte("HTTP")) || !bytes.Equal(versionParts[1], []byte("1.1")) {
-		return 0, nil, ErrUnsupportedHttpVersion
+		return 0, nil, ErrUnsupportedHTTPVersion
 	}
 
 	if !slices.ContainsFunc(HTTPMethods, func(m []byte) bool {
 		return bytes.Equal(m, method)
 	}) {
-		return 0, nil, ErrUnsupportedHttpMethod
+		return 0, nil, ErrUnsupportedHTTPMethod
 	}
 
 	return len([]byte(line)) + len(LineSeparator), &RequestLine{
@@ -135,7 +186,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	buffer := make([]byte, 1024)
 	bufferLen := 0
 
-	for request.state != Done {
+	for request.state != StateDone {
 		n, err := reader.Read(buffer[bufferLen:])
 		if err != nil {
 			break
@@ -150,5 +201,10 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 			buffer = buffer[bytesProcessed:]
 		}
 	}
+
+	if getIntFromHeader(request.Headers, "content-length", 0) != len(request.Body) {
+		return nil, ErrBodyWithinContentLength
+	}
+
 	return request, nil
 }
