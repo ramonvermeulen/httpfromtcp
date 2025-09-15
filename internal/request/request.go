@@ -23,7 +23,6 @@ var HTTPMethods = [][]byte{
 
 var (
 	ErrMalformedRequestLine    = fmt.Errorf("malformed request line")
-	ErrMalformedContentLength  = fmt.Errorf("malformed request line")
 	ErrUnsupportedHTTPVersion  = fmt.Errorf("unsupported HTTP version")
 	ErrUnsupportedHTTPMethod   = fmt.Errorf("unsupported HTTP method")
 	ErrParsingInDoneState      = fmt.Errorf("attempted to parse request in done state")
