@@ -61,12 +61,15 @@ func main() {
 		body := respond200()
 
 		if req.RequestLine.RequestTarget == "/yourproblem" {
+			h.Set("Content-Type", "text/html")
 			s = response.StatusBadRequest
 			body = respond400()
 		} else if req.RequestLine.RequestTarget == "/myproblem" {
+			h.Set("Content-Type", "text/html")
 			s = response.StatusError
 			body = respond500()
 		} else if after, ok := strings.CutPrefix(req.RequestLine.RequestTarget, "/httpbin"); ok {
+			// chunked encoding example with trailers
 			proxyRes, err := http.Get(fmt.Sprintf("https://httpbin.org%s", after))
 			if err != nil {
 				s = response.StatusError
@@ -96,10 +99,21 @@ func main() {
 				res.WriteTrailers(trailer)
 				return
 			}
+		} else if req.RequestLine.RequestTarget == "/video" {
+			// video example to show any binary data can be send
+			// mkdir assets
+			// curl -o assets/vim.mp4 https://storage.googleapis.com/qvault-webapp-dynamic-assets/lesson_videos/vim-vs-neovim-prime.mp4
+			h.Set("Content-Type", "video/mp4")
+			videoConent, err := os.ReadFile("assets/vim.mp4")
+			if err != nil {
+				s = response.StatusError
+				body = respond500()
+			} else {
+				body = videoConent
+			}
 		}
 
 		res.WriteStatusLine(s)
-		h.Set("Content-Type", "text/html")
 		h.Set("Content-Length", fmt.Sprintf("%d", len(body)))
 		res.WriteHeaders(h)
 		res.WriteBody(body)
