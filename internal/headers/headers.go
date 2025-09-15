@@ -63,6 +63,16 @@ func (h Headers) Set(key, value string) {
 	}
 }
 
+func (h Headers) Replace(key, value string) {
+	name := strings.ToLower(key)
+	h[name] = value
+}
+
+func (h Headers) Del(key string) {
+	name := strings.ToLower(key)
+	delete(h, name)
+}
+
 func (h Headers) Parse(data []byte) (int, bool, error) {
 	read := 0
 	done := false

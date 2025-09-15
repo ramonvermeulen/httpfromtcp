@@ -58,3 +58,15 @@ func (w *Writer) WriteBody(body []byte) (int, error) {
 	n, err := w.writer.Write(body)
 	return n, err
 }
+
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	fmt.Fprintf(w.writer, "%x\r\n", len(p))
+	fmt.Fprintf(w.writer, "%s\r\n", p)
+	return len(p), nil
+}
+
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	endChunk := []byte("0\r\n\r\n")
+	w.writer.Write(endChunk)
+	return len(endChunk), nil
+}

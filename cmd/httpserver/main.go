@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/ramonvermeulen/httpfromtcp/cmd/server"
@@ -60,10 +62,31 @@ func main() {
 		if req.RequestLine.RequestTarget == "/yourproblem" {
 			s = response.StatusBadRequest
 			body = respond400()
-		}
-		if req.RequestLine.RequestTarget == "/myproblem" {
+		} else if req.RequestLine.RequestTarget == "/myproblem" {
 			s = response.StatusError
 			body = respond500()
+		} else if after, ok := strings.CutPrefix(req.RequestLine.RequestTarget, "/httpbin"); ok {
+			proxyRes, err := http.Get(fmt.Sprintf("https://httpbin.org%s", after))
+			if err != nil {
+				s = response.StatusError
+				body = respond500()
+			} else {
+				res.WriteStatusLine(s)
+				h.Set("transfer-encoding", proxyRes.Header.Get("transfer-encoding"))
+				h.Set("Content-Type", proxyRes.Header.Get("Content-Type"))
+				res.WriteHeaders(h)
+				res.WriteBody(body)
+				for {
+					data := make([]byte, 32)
+					n, err := proxyRes.Body.Read(data)
+					if err != nil {
+						break
+					}
+					res.WriteChunkedBody(data[:n])
+				}
+				res.WriteChunkedBodyDone()
+				return
+			}
 		}
 
 		res.WriteStatusLine(s)
