@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"log"
 	"net/http"
@@ -74,17 +75,25 @@ func main() {
 				res.WriteStatusLine(s)
 				h.Set("transfer-encoding", proxyRes.Header.Get("transfer-encoding"))
 				h.Set("Content-Type", proxyRes.Header.Get("Content-Type"))
+				h.Set("Trailer", "X-Content-Length")
+				h.Set("Trailer", "X-COntent-SHA256")
 				res.WriteHeaders(h)
-				res.WriteBody(body)
+				fullBody := make([]byte, 0)
 				for {
 					data := make([]byte, 32)
 					n, err := proxyRes.Body.Read(data)
+					fullBody = append(fullBody, data[:n]...)
 					if err != nil {
 						break
 					}
 					res.WriteChunkedBody(data[:n])
 				}
-				res.WriteChunkedBodyDone()
+				res.WriteChunkedBodyDone(true)
+				hash := sha256.Sum256(fullBody)
+				trailer := headers.NewHeaders()
+				trailer.Set("X-Content-Length", fmt.Sprintf("%d", len(fullBody)))
+				trailer.Set("X-Content-SHA256", fmt.Sprintf("%x", hash))
+				res.WriteTrailers(trailer)
 				return
 			}
 		}
